@@ -15,12 +15,10 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     @IBOutlet var tableView: UITableView!
     
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    var operations = [Expense]()
+    var fetchedResultController: NSFetchedResultsController<Expense>!
     
     let defaults = UserDefaults.standard
     var balance: Float = 0
-    
-    //var transactionDates: [String] = []
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -32,38 +30,61 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         balanceLabel.text = NSString(format: "%.2f", balance) as String
         
         loadData()
-        //datesCount()
     }
     
-//    func numberOfSections(in tableView: UITableView) -> Int {
-//        return transactionDates.count
-//    }
+    func numberOfSections(in tableView: UITableView) -> Int {
+        return fetchedResultController.sections!.count
+    }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return operations.count
+        guard let sections = self.fetchedResultController.sections else {
+            fatalError("No sections in fetchedResultController")
+        }
+        let sectionInfo = sections[section]
+        return sectionInfo.numberOfObjects
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath) as! Cell
         
-        cell.categoryLabel.text = operations[indexPath.row].category
-        cell.noteLabel.text = operations[indexPath.row].note ?? ""
-        
-        if operations[indexPath.row].expanse == true {
-            cell.amountLabel.textColor = UIColor.red
-            cell.amountLabel.text = "-\(operations[indexPath.row].amount)"
-        } else {
-            cell.amountLabel.textColor = UIColor.green
-            cell.amountLabel.text = "+\(operations[indexPath.row].amount)"
-        }
+        configureCell(cell, at: indexPath)
         
         return cell
     }
     
-//    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-//        let dateString = transactionDates[section]
-//        return dateString
-//    }
+    func configureCell(_ cell: Cell, at indexPath: IndexPath) {
+        guard let transaction = self.fetchedResultController?.object(at: indexPath) else {
+            fatalError("Can't configure cell") }
+        
+        cell.categoryLabel.text = transaction.category
+        cell.noteLabel.text = transaction.note ?? ""
+        
+        if transaction.expanse == true {
+            cell.amountLabel.textColor = UIColor.red
+            cell.amountLabel.text = "-\(transaction.amount)"
+        } else {
+            cell.amountLabel.textColor = UIColor.green
+            cell.amountLabel.text = "+\(transaction.amount)"
+        }
+    }
+    
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        guard let sectionInfo = fetchedResultController?.sections?[section] else {
+            return nil
+        }
+
+        return sectionInfo.name
+    }
+    
+    func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
+        if let headerView = view as? UITableViewHeaderFooterView {
+            headerView.textLabel?.textAlignment = .center
+        }
+    }
+    
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: false)
+    }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "newTransaction" {
@@ -75,13 +96,14 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     func newTransaction(amount: Float, category: String, note: String, date: Date, spend: Bool) {
         let transaction = Expense(context: context)
         
+        
         transaction.category = category
         transaction.note = note
         transaction.date = date
         transaction.amount = amount
         transaction.expanse = spend
         
-        operations.append(transaction)
+        //operations.append(transaction)
         
         saveData()
         
@@ -111,29 +133,73 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     func loadData() {
         
         let fetchRequest: NSFetchRequest<Expense> = Expense.fetchRequest()
+        let sortDescriptor = NSSortDescriptor(key: "date", ascending: false)
+        fetchRequest.sortDescriptors = [sortDescriptor]
+        
+        fetchedResultController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: context, sectionNameKeyPath: #keyPath(Expense.isDate), cacheName: nil)
+        fetchedResultController.delegate = self
         
         do {
-            operations = try context.fetch(fetchRequest)
+            //operations = try context.fetch(fetchRequest)
+            try fetchedResultController.performFetch()
         } catch {
             print("Load data error: \(error)")
         }
      
         tableView.reloadData()
     }
-    
-//    func datesCount() {
-//        let dateFormatter = DateFormatter()
-//        dateFormatter.dateFormat = "dd MMM YYYY"
-//        //dateFormatter.dateStyle = .medium
-//
-//        if !(operations.isEmpty) {
-//            for each in operations {
-//                if !(transactionDates.contains(dateFormatter.string(from: each.date!))) {
-//                    transactionDates.append(dateFormatter.string(from: each.date!))
-//                }
-//            }
-//        }
-//    }
 
 }
 
+extension Expense {
+    
+    @objc var isDate: String {
+        get {
+            let dateFromatter = DateFormatter()
+            dateFromatter.dateFormat = "MMMM dd"
+            
+            return dateFromatter.string(from: date!)
+        }
+    }
+}
+
+extension ViewController: NSFetchedResultsControllerDelegate {
+    func controllerWillChangeContent(_ controller: NSFetchedResultsController<NSFetchRequestResult>) {
+        tableView.beginUpdates()
+    }
+    
+    func controllerDidChangeContent(_ controller: NSFetchedResultsController<NSFetchRequestResult>) {
+        tableView.endUpdates()
+    }
+    
+    func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
+        switch type {
+        case .insert:
+            if let indexPath = newIndexPath {
+                tableView.insertRows(at: [indexPath], with: .fade)
+            }
+            break
+        case .delete:
+            if let indexPath = indexPath {
+                tableView.deleteRows(at: [indexPath], with: .fade)
+            }
+            break
+        case .move:
+            if let indexPath = indexPath {
+                tableView.deleteRows(at: [indexPath], with: .fade)
+            }
+            
+            if let newIndexPath = newIndexPath {
+                tableView.insertRows(at: [newIndexPath], with: .fade)
+            }
+            break
+        case .update:
+            if let indexPath = indexPath {
+                let cell = tableView.cellForRow(at: indexPath) as! Cell
+                configureCell(cell, at: indexPath)
+            }
+        @unknown default:
+            break
+        }
+    }
+}
