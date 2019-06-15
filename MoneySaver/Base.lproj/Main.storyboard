@@ -250,11 +250,12 @@
                         <outlet property="datePicker" destination="jbe-xC-cK9" id="TfP-zP-6Mc"/>
                         <outlet property="dateTextField" destination="YUx-J2-1cJ" id="kOv-NH-BG5"/>
                         <outlet property="noteTextField" destination="hIE-EG-ejL" id="SnR-uq-J52"/>
+                        <outlet property="segmentControl" destination="xMq-t5-3Om" id="ptA-cw-1v0"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="wsf-Bb-oTD" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="2216" y="104"/>
+            <point key="canvasLocation" x="2218" y="103"/>
         </scene>
         <!--Categories-->
         <scene sceneID="QW2-Jt-LOJ">

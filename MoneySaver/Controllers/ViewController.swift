@@ -19,6 +19,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     
     let defaults = UserDefaults.standard
     var balance: Float = 0
+    var index: IndexPath!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -28,8 +29,6 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         
         balance = defaults.float(forKey: "Balance")
         balanceLabel.text = NSString(format: "%.2f", balance) as String
-        
-        //loadData()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -89,38 +88,99 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: false)
+        
+        guard let transcation = self.fetchedResultController?.object(at: indexPath) else { fatalError("Error") }
+        let optionMenu = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        
+        let deleteAction = UIAlertAction(title: "Delete", style: .destructive) { (action) in
+            self.balanceCalculation(transaction: transcation)
+            self.defaults.set(self.balance, forKey: "Balance")
+            self.balanceLabel.text = NSString(format: "%.2f", self.balance) as String
+            self.context.delete(transcation)
+            self.saveData()
+        }
+        
+        let editAction = UIAlertAction(title: "Edit", style: .default) { (action) in
+            self.index = self.fetchedResultController.indexPath(forObject: transcation)
+            self.balanceCalculation(transaction: transcation)
+            self.performSegue(withIdentifier: "newTransaction", sender: self)
+        }
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel) { (action) in
+            tableView.deselectRow(at: indexPath, animated: true)
+        }
+        
+        optionMenu.addAction(deleteAction)
+        optionMenu.addAction(editAction)
+        optionMenu.addAction(cancelAction)
+        
+        present(optionMenu, animated: true, completion: nil)
+    }
+    
+    func balanceCalculation(transaction: Transaction) {
+        if transaction.expanse == true {
+            self.balance += transaction.amount
+        } else {
+            self.balance -= transaction.amount
+        }
     }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "newTransaction" {
             let destinationVC = segue.destination as! NewTransactionController
             destinationVC.delegate = self
+            
+            if let indexPath = tableView.indexPathForSelectedRow {
+                destinationVC.newTransaction = false
+                let transcation = fetchedResultController.object(at: indexPath)
+                destinationVC.amount = transcation.amount
+                destinationVC.category = transcation.category ?? ""
+                destinationVC.note = transcation.note ?? ""
+                destinationVC.date = transcation.date!
+                destinationVC.moneySpend = transcation.expanse
+            }
         }
     }
     
-    func newTransaction(amount: Float, category: String, note: String, date: Date, spend: Bool) {
-        let transaction = Transaction(context: context)
-        
-        
-        transaction.category = category
-        transaction.note = note
-        transaction.date = date
-        transaction.amount = amount
-        transaction.expanse = spend
+    func newTransaction(amout: Float, category: String, note: String, date: Date, spend: Bool, newTranscation: Bool) {
+        if newTranscation == true {
+            let transaction = Transaction(context: context)
+            
+            transaction.category = category
+            transaction.note = note
+            transaction.date = date
+            transaction.amount = amout
+            transaction.expanse = spend
+            
+            balanceOperation(spend: spend, amount: amout)
+            
+        } else {
+            guard let transaction = fetchedResultController?.object(at: index) else { fatalError("No object with this IndexPath") }
+            transaction.amount = amout
+            transaction.category = category
+            transaction.note = note
+            transaction.expanse = spend
+            transaction.date = date
+            
+            balanceOperation(spend: spend, amount: amout)
+            
+            tableView.reloadData()
+        }
         
         saveData()
         
+        balanceLabel.text = NSString(format: "%.2f", balance) as String
+    }
+    
+    func balanceOperation(spend: Bool, amount: Float) {
         if spend == true {
-            balance -= transaction.amount
+            balance -= amount
             defaults.set(balance, forKey: "Balance")
             
         } else {
-            balance += transaction.amount
+            balance += amount
             defaults.set(balance, forKey: "Balance")
         }
-        
-        balanceLabel.text = NSString(format: "%.2f", balance) as String
     }
     
     func saveData() {
@@ -192,9 +252,7 @@ extension ViewController: NSFetchedResultsControllerDelegate {
             break
         case .update:
             if let indexPath = indexPath {
-                print("Update:\(indexPath)")
-                let cell = tableView.cellForRow(at: indexPath) as! Cell
-                configureCell(cell, at: indexPath)
+                tableView.reloadRows(at: [indexPath], with: .fade)
             }
             break
         case .move:
